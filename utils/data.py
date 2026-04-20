@@ -27,15 +27,40 @@ LAB_DISPLAY_COLS = ["charttime", "label", "valuenum", "valueuom",
                     "ref_range_lower", "ref_range_upper", "flag"]
 
 
-@st.cache_data
+def _download_csv_from_drive(file_id: str) -> pd.DataFrame:
+    """Google Drive 파일 ID로 CSV를 다운로드해서 DataFrame으로 반환."""
+    import io
+    from google.oauth2.service_account import Credentials
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaIoBaseDownload
+
+    scopes = ["https://www.googleapis.com/auth/drive.readonly"]
+    creds = Credentials.from_service_account_info(
+        dict(st.secrets["gcp_service_account"]), scopes=scopes
+    )
+    service = build("drive", "v3", credentials=creds)
+
+    buf = io.BytesIO()
+    request = service.files().get_media(fileId=file_id)
+    downloader = MediaIoBaseDownload(buf, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    buf.seek(0)
+    return pd.read_csv(buf)
+
+
+@st.cache_data(show_spinner="데이터 로딩 중...")
 def load_data():
-    t0   = pd.read_csv(BASE_DIR / "50_cases_T0_ready_with_medrecon.csv")
-    t1   = pd.read_csv(BASE_DIR / "50_cases_T1_consolidated.csv")
-    tall = pd.read_csv(BASE_DIR / "50_cases_Tall_consolidated.csv")
+    drive = st.secrets["drive"]
+    t0   = _download_csv_from_drive(drive["T0_file_id"])
+    t1   = _download_csv_from_drive(drive["T1_file_id"])
+    tall = _download_csv_from_drive(drive["Tall_file_id"])
     for df in (t0, t1, tall):
         if "target_disease" in df.columns:
             df.drop(columns=["target_disease"], inplace=True)
     return t0, t1, tall
+
 
 
 def is_abnormal(key: str, val) -> bool:
