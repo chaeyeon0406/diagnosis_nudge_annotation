@@ -298,6 +298,74 @@ def _render_labs_with_toggle(json_val, section_key: str) -> None:
         _render_labs_pivot(df)
 
 
+# ===== [추가] Radiology Reports Section =====
+
+def _render_radiology_reports(json_val) -> None:
+    """Radiology 리포트 목록을 charttime 오름차순으로 표시.
+    상단: 검사 시간대 요약 테이블 / 하단: full_report expander 목록
+    """
+    records = parse_json_col(json_val)
+    if not records:
+        st.markdown("<p style='color:#999'>해당 시점에 촬영된 영상 없음</p>", unsafe_allow_html=True)
+        return
+
+    # charttime 오름차순 정렬
+    try:
+        records = sorted(records, key=lambda r: r.get("charttime", ""))
+    except Exception:
+        pass
+
+    # ── 상단: 검사 시간대 요약 테이블 ────────────────────────────────────
+    rows_html = []
+    for i, report in enumerate(records, start=1):
+        charttime = report.get("charttime", "—")
+        exam_name = report.get("exam_name", "—")
+        exam_code = report.get("exam_code", "")
+        code_str  = f"<span style='color:#888;font-size:0.78rem'>{exam_code}</span>" if exam_code else ""
+        rows_html.append(f"""
+<tr>
+  <td style="text-align:center;color:#666;font-size:0.82rem">{i}</td>
+  <td style="color:#1a3a5c;font-weight:600;white-space:nowrap">{charttime}</td>
+  <td>{exam_name}</td>
+  <td>{code_str}</td>
+</tr>""")
+
+    table_html = f"""
+<div style="overflow-x:auto;margin-bottom:12px">
+<table class="darwin-lab-table">
+  <thead>
+    <tr>
+      <th style="width:36px">#</th>
+      <th>검사일시</th>
+      <th>검사명</th>
+      <th>코드</th>
+    </tr>
+  </thead>
+  <tbody>{''.join(rows_html)}</tbody>
+</table>
+</div>"""
+    st.markdown(
+        f"<span style='font-size:0.8rem;color:#666'>총 {len(records)}건</span>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
+
+    # ── 하단: full report 상세 expander ──────────────────────────────────
+    st.markdown(
+        "<p style='font-size:0.85rem;color:#555;margin:8px 0 4px'>📄 리포트 상세 보기</p>",
+        unsafe_allow_html=True,
+    )
+    for report in records:
+        charttime   = report.get("charttime", "—")
+        exam_name   = report.get("exam_name", "—")
+        full_report = report.get("full_report", "")
+        title = f"{charttime} | {exam_name}"
+        with st.expander(title, expanded=False):
+            st.text(full_report)
+
+# ===== [추가] Radiology Reports Section END =====
+
+
 # ── T0 expander (T1/Tall 탭 공통) ────────────────────────────────────────────
 
 def _t0_summary_expander(row_t0: pd.Series) -> None:
@@ -381,6 +449,12 @@ def render_tabs(row_t0: pd.Series, row_t1: pd.Series, row_tall: pd.Series,
             _render_labs_with_toggle(row_t1.get("labs_t1_history"), "t1")
             _card_close()
 
+            # ===== [추가] Radiology Reports Section =====
+            _card_open("🩻 Radiology Reports (T1)")
+            _render_radiology_reports(row_t1.get("radiology_t1_history"))
+            _card_close()
+            # ===== [추가] Radiology Reports Section END =====
+
         with col_ann:
             render_annotation_panel(reviewer, idx, stay_id, total, "T1", existing_ann)
 
@@ -397,6 +471,12 @@ def render_tabs(row_t0: pd.Series, row_t1: pd.Series, row_tall: pd.Series,
             _card_open("Lab Results (Tall - 전체)")
             _render_labs_with_toggle(row_tall.get("labs_tall_history"), "tall")
             _card_close()
+
+            # ===== [추가] Radiology Reports Section =====
+            _card_open("🩻 Radiology Reports (Tall - 전체)")
+            _render_radiology_reports(row_tall.get("radiology_tall_history"))
+            _card_close()
+            # ===== [추가] Radiology Reports Section END =====
 
         with col_ann:
             render_annotation_panel(reviewer, idx, stay_id, total, "Tall", existing_ann)

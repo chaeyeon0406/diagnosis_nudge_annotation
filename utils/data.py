@@ -53,9 +53,11 @@ def _download_csv_from_drive(file_id: str) -> pd.DataFrame:
 @st.cache_data(show_spinner="데이터 로딩 중...")
 def load_data():
     drive = st.secrets["drive"]
+    # T1/Tall radiology 파일이 기존 데이터 + radiology 컬럼을 모두 포함
     t0   = _download_csv_from_drive(drive["T0_file_id"])
-    t1   = _download_csv_from_drive(drive["T1_file_id"])
-    tall = _download_csv_from_drive(drive["Tall_file_id"])
+    t1   = _download_csv_from_drive(drive["T1_radiology_file_id"])
+    tall = _download_csv_from_drive(drive["Tall_radiology_file_id"])
+
     for df in (t0, t1, tall):
         if "target_disease" in df.columns:
             df.drop(columns=["target_disease"], inplace=True)
