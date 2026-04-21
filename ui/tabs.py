@@ -235,21 +235,99 @@ def _render_labs_pivot(df: pd.DataFrame) -> None:
     st.markdown(html, unsafe_allow_html=True)
 
 
+# ── Lab + Imaging 병합 목록 ───────────────────────────────────────────────────
+
+def _render_merged_list(lab_df: pd.DataFrame, rad_records: list) -> None:
+    """Lab + Radiology를 charttime 기준 하나의 표에 시간순 병합.
+    Imaging 행은 <details><summary> 네이티브 토글로 리포트 펼치기/접기.
+    """
+    import html as _html
+
+    events = []
+    for _, r in lab_df.iterrows():
+        events.append({"type": "lab", "charttime": str(r.get("charttime", "")), "row": r})
+    for rec in rad_records:
+        events.append({"type": "rad", "charttime": str(rec.get("charttime", "")), "rec": rec})
+    events.sort(key=lambda e: e["charttime"])
+
+    rows_html = []
+    prev_time: str | None = None
+
+    for ev in events:
+        charttime = ev["charttime"]
+        sep = ' class="group-sep"' if (prev_time is not None and charttime != prev_time) else ""
+
+        if ev["type"] == "lab":
+            r       = ev["row"]
+            label   = str(r.get("label", "—"))
+            unit    = str(r.get("valueuom", "")) if r.get("valueuom") else ""
+            vnum_f  = _safe_float(r.get("valuenum"))
+            lo_f    = _safe_float(r.get("ref_range_lower"))
+            hi_f    = _safe_float(r.get("ref_range_upper"))
+            result  = _cell_html(vnum_f, lo_f, hi_f)
+            min_str = _fmt_num(lo_f) if lo_f is not None else "-"
+            max_str = _fmt_num(hi_f) if hi_f is not None else "-"
+            rows_html.append(f"""
+<tr{sep}>
+  <td>{label}</td><td>{result}</td><td class="lab-unit">{unit}</td>
+  <td class="lab-range">{min_str}</td><td class="lab-range">{max_str}</td>
+  <td class="lab-time">{charttime}</td>
+</tr>""")
+
+        else:  # radiology
+            rec       = ev["rec"]
+            exam_name = _html.escape(str(rec.get("exam_name", "영상검사")))
+            report    = _html.escape(str(rec.get("full_report", "리포트 없음")))
+            rows_html.append(f"""
+<tr{sep} style="background:#eef3f9;">
+  <td colspan="5">
+    <details>
+      <summary style="cursor:pointer;color:#1a3a5c;font-weight:600;
+                      list-style:none;padding:2px 0;">
+        🩻 {exam_name}
+      </summary>
+      <pre style="white-space:pre-wrap;font-size:0.73rem;color:#333;
+                  margin:6px 0 2px;padding:8px;background:#fff;
+                  border-radius:4px;border:1px solid #d0dcea;">{report}</pre>
+    </details>
+  </td>
+  <td class="lab-time">{charttime}</td>
+</tr>""")
+
+        prev_time = charttime
+
+    html = f"""
+<div style="overflow-x:auto;">
+<table class="darwin-lab-table">
+  <thead>
+    <tr>
+      <th>검사명</th><th>결과</th><th>단위</th>
+      <th>Min</th><th>Max</th><th>검사일시</th>
+    </tr>
+  </thead>
+  <tbody>{''.join(rows_html)}</tbody>
+</table>
+</div>"""
+    st.markdown(html, unsafe_allow_html=True)
+
+
 # ── Lab: 모드 토글 + 렌더 ─────────────────────────────────────────────────────
 
 def _set_lab_view(section_key: str, mode: str) -> None:
     st.session_state[f"lab_view_{section_key}"] = mode
 
 
-def _render_labs_with_toggle(json_val, section_key: str) -> None:
-    records = parse_json_col(json_val)
-    if not records:
+def _render_labs_with_toggle(lab_json, section_key: str, rad_json=None) -> None:
+    lab_records = parse_json_col(lab_json)
+    rad_records = parse_json_col(rad_json) if rad_json else []
+
+    if not lab_records and not rad_records:
         st.markdown("<p style='color:#999'>데이터 없음</p>", unsafe_allow_html=True)
         return
 
-    df = pd.DataFrame(records)
-    if "charttime" in df.columns:
-        df = df.sort_values("charttime").reset_index(drop=True)
+    lab_df = pd.DataFrame(lab_records)
+    if "charttime" in lab_df.columns:
+        lab_df = lab_df.sort_values("charttime").reset_index(drop=True)
 
     state_key = f"lab_view_{section_key}"
     st.session_state.setdefault(state_key, "list")
@@ -260,110 +338,40 @@ def _render_labs_with_toggle(json_val, section_key: str) -> None:
         f"div[data-testid='stMarkdown']:has(span.{marker})"
         f" + div[data-testid='stHorizontalBlock']"
         f" div[data-testid='stColumn']:first-child button"
-        "{ background: var(--lab-toggle-color) !important;"
-        "  color: #fff !important; }"
+        "{ background: var(--lab-toggle-color) !important; color: #fff !important; }"
     ) if mode == "list" else ""
     pivot_css = (
         f"div[data-testid='stMarkdown']:has(span.{marker})"
         f" + div[data-testid='stHorizontalBlock']"
         f" div[data-testid='stColumn']:last-child button"
-        "{ background: var(--lab-toggle-color) !important;"
-        "  color: #fff !important; }"
+        "{ background: var(--lab-toggle-color) !important; color: #fff !important; }"
     ) if mode == "pivot" else ""
+
+    count_str = f"Lab {len(lab_df)}건"
+    if rad_records:
+        count_str += f" · 영상 {len(rad_records)}건"
 
     combined_css = f"<style>{list_css}{pivot_css}</style>" if (list_css or pivot_css) else ""
     st.markdown(
         f'{combined_css}<span class="{marker}"></span>'
-        f'<span style="font-size:0.8rem; color:#666;">총 {len(df)}건</span>',
+        f'<span style="font-size:0.8rem; color:#666;">{count_str}</span>',
         unsafe_allow_html=True,
     )
 
     col_list, col_pivot, *_ = st.columns([1, 1, 6])
     with col_list:
-        st.button(
-            "목록 보기", key=f"btn_list_{section_key}",
-            use_container_width=True,
-            on_click=_set_lab_view, args=(section_key, "list"),
-        )
+        st.button("목록 보기", key=f"btn_list_{section_key}",
+                  use_container_width=True,
+                  on_click=_set_lab_view, args=(section_key, "list"))
     with col_pivot:
-        st.button(
-            "시계열 보기", key=f"btn_pivot_{section_key}",
-            use_container_width=True,
-            on_click=_set_lab_view, args=(section_key, "pivot"),
-        )
+        st.button("시계열 보기", key=f"btn_pivot_{section_key}",
+                  use_container_width=True,
+                  on_click=_set_lab_view, args=(section_key, "pivot"))
 
     if mode == "list":
-        _render_labs_list(df)
+        _render_merged_list(lab_df, rad_records)
     else:
-        _render_labs_pivot(df)
-
-
-# ===== [추가] Radiology Reports Section =====
-
-def _render_radiology_reports(json_val) -> None:
-    """Radiology 리포트 목록을 charttime 오름차순으로 표시.
-    상단: 검사 시간대 요약 테이블 / 하단: full_report expander 목록
-    """
-    records = parse_json_col(json_val)
-    if not records:
-        st.markdown("<p style='color:#999'>해당 시점에 촬영된 영상 없음</p>", unsafe_allow_html=True)
-        return
-
-    # charttime 오름차순 정렬
-    try:
-        records = sorted(records, key=lambda r: r.get("charttime", ""))
-    except Exception:
-        pass
-
-    # ── 상단: 검사 시간대 요약 테이블 ────────────────────────────────────
-    rows_html = []
-    for i, report in enumerate(records, start=1):
-        charttime = report.get("charttime", "—")
-        exam_name = report.get("exam_name", "—")
-        exam_code = report.get("exam_code", "")
-        code_str  = f"<span style='color:#888;font-size:0.78rem'>{exam_code}</span>" if exam_code else ""
-        rows_html.append(f"""
-<tr>
-  <td style="text-align:center;color:#666;font-size:0.82rem">{i}</td>
-  <td style="color:#1a3a5c;font-weight:600;white-space:nowrap">{charttime}</td>
-  <td>{exam_name}</td>
-  <td>{code_str}</td>
-</tr>""")
-
-    table_html = f"""
-<div style="overflow-x:auto;margin-bottom:12px">
-<table class="darwin-lab-table">
-  <thead>
-    <tr>
-      <th style="width:36px">#</th>
-      <th>검사일시</th>
-      <th>검사명</th>
-      <th>코드</th>
-    </tr>
-  </thead>
-  <tbody>{''.join(rows_html)}</tbody>
-</table>
-</div>"""
-    st.markdown(
-        f"<span style='font-size:0.8rem;color:#666'>총 {len(records)}건</span>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(table_html, unsafe_allow_html=True)
-
-    # ── 하단: full report 상세 expander ──────────────────────────────────
-    st.markdown(
-        "<p style='font-size:0.85rem;color:#555;margin:8px 0 4px'>📄 리포트 상세 보기</p>",
-        unsafe_allow_html=True,
-    )
-    for report in records:
-        charttime   = report.get("charttime", "—")
-        exam_name   = report.get("exam_name", "—")
-        full_report = report.get("full_report", "")
-        title = f"{charttime} | {exam_name}"
-        with st.expander(title, expanded=False):
-            st.text(full_report)
-
-# ===== [추가] Radiology Reports Section END =====
+        _render_labs_pivot(lab_df)   # 피벗은 lab만 (imaging은 수치 없음)
 
 
 # ── T0 expander (T1/Tall 탭 공통) ────────────────────────────────────────────
@@ -445,15 +453,12 @@ def render_tabs(row_t0: pd.Series, row_t1: pd.Series, row_tall: pd.Series,
             _render_history_df(row_t1.get("vitals_t1_history"))
             _card_close()
 
-            _card_open("Lab Results (T1)")
-            _render_labs_with_toggle(row_t1.get("labs_t1_history"), "t1")
+            _card_open("검사 결과 (T1)")
+            _render_labs_with_toggle(
+                row_t1.get("labs_t1_history"), "t1",
+                row_t1.get("radiology_t1_history"),
+            )
             _card_close()
-
-            # ===== [추가] Radiology Reports Section =====
-            _card_open("🩻 Radiology Reports (T1)")
-            _render_radiology_reports(row_t1.get("radiology_t1_history"))
-            _card_close()
-            # ===== [추가] Radiology Reports Section END =====
 
         with col_ann:
             render_annotation_panel(reviewer, idx, stay_id, total, "T1", existing_ann)
@@ -468,15 +473,12 @@ def render_tabs(row_t0: pd.Series, row_t1: pd.Series, row_tall: pd.Series,
             _render_history_df(row_tall.get("vitals_tall_history"))
             _card_close()
 
-            _card_open("Lab Results (Tall - 전체)")
-            _render_labs_with_toggle(row_tall.get("labs_tall_history"), "tall")
+            _card_open("검사 결과 (Tall - 전체)")
+            _render_labs_with_toggle(
+                row_tall.get("labs_tall_history"), "tall",
+                row_tall.get("radiology_tall_history"),
+            )
             _card_close()
-
-            # ===== [추가] Radiology Reports Section =====
-            _card_open("🩻 Radiology Reports (Tall - 전체)")
-            _render_radiology_reports(row_tall.get("radiology_tall_history"))
-            _card_close()
-            # ===== [추가] Radiology Reports Section END =====
 
         with col_ann:
             render_annotation_panel(reviewer, idx, stay_id, total, "Tall", existing_ann)
