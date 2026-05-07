@@ -49,7 +49,7 @@ if not st.session_state.started:
         </div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
-        reviewer = st.radio("Reviewer 선택", ["김민하 교수님", "맹승진 교수님"],
+        reviewer = st.radio("Reviewer 선택", ["김민하 교수님", "맹승진 교수님", "장한솔 교수님"],
                             horizontal=True, key="reviewer_select")
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("▶  Annotation 시작", type="primary", use_container_width=True):

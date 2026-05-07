@@ -11,7 +11,8 @@ DISEASE_COLS = [
     ("Meningitis",            "meningitis"),
     ("Sepsis",                "sepsis"),
 ]
-REVIEWERS = list(SHEET_TAB_MAP.keys())   # ["김민하 교수님", "맹승진 교수님"]
+REVIEWERS = list(SHEET_TAB_MAP.keys())   # ["김민하 교수님", "맹승진 교수님", "장한솔 교수님"]
+REVIEWER_LABELS = ["A", "B", "C"]
 
 
 # ── 인증 UI ──────────────────────────────────────────────────────────────────
@@ -50,11 +51,12 @@ def render_admin_login_sidebar() -> None:
 
 # ── 데이터 준비 ───────────────────────────────────────────────────────────────
 
-def _load_both() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Reviewer A / B annotation 데이터 반환."""
+def _load_all() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Reviewer A / B / C annotation 데이터 반환."""
     ann_a = load_annotations(REVIEWERS[0])
     ann_b = load_annotations(REVIEWERS[1])
-    return ann_a, ann_b
+    ann_c = load_annotations(REVIEWERS[2])
+    return ann_a, ann_b, ann_c
 
 
 def _completion_stats(ann: pd.DataFrame) -> dict:
@@ -66,12 +68,11 @@ def _completion_stats(ann: pd.DataFrame) -> dict:
     return {"t0": len(t0), "t1": len(t1), "both": len(t0 & t1)}
 
 
-def _build_compare_df(ann_a: pd.DataFrame, ann_b: pd.DataFrame) -> pd.DataFrame:
+def _build_compare_df(ann_a: pd.DataFrame, ann_b: pd.DataFrame, ann_c: pd.DataFrame) -> pd.DataFrame:
     """case_index × timepoint × 질환 기준 비교 DataFrame 생성."""
     rows = []
-    disease_cols = [col for _, col in DISEASE_COLS]
 
-    for ann, rev_key in [(ann_a, "A"), (ann_b, "B")]:
+    for ann, rev_key in [(ann_a, "A"), (ann_b, "B"), (ann_c, "C")]:
         if ann.empty or "timepoint" not in ann.columns:
             continue
         for _, row in ann.iterrows():
@@ -101,45 +102,53 @@ def _build_compare_df(ann_a: pd.DataFrame, ann_b: pd.DataFrame) -> pd.DataFrame:
     ).reset_index()
     pivot.columns.name = None
 
-    # 누락 컬럼 보정
-    for col in ("A", "B"):
+    for col in ("A", "B", "C"):
         if col not in pivot.columns:
             pivot[col] = ""
 
-    pivot = pivot.rename(columns={"A": "Reviewer A", "B": "Reviewer B"})
-    pivot["일치"] = pivot.apply(
-        lambda r: (
-            "✅" if r["Reviewer A"] == r["Reviewer B"] and r["Reviewer A"] != ""
-            else ("❌" if r["Reviewer A"] != r["Reviewer B"] else "—")
-        ),
-        axis=1,
-    )
+    pivot = pivot.rename(columns={"A": "Reviewer A", "B": "Reviewer B", "C": "Reviewer C"})
+
+    def _agree(r):
+        vals = [v for v in [r["Reviewer A"], r["Reviewer B"], r["Reviewer C"]] if v != ""]
+        if len(vals) < 2:
+            return "—"
+        return "✅" if len(set(vals)) == 1 else "❌"
+
+    pivot["일치"] = pivot.apply(_agree, axis=1)
     return pivot.sort_values(["case_index", "timepoint", "disease"]).reset_index(drop=True)
 
 
 def _kappa_table(compare: pd.DataFrame) -> pd.DataFrame:
-    """질환 × 시점별 Cohen's Kappa 계산."""
+    """질환 × 시점별 Cohen's Kappa 계산 (A-B, A-C, B-C 쌍별)."""
     try:
         from sklearn.metrics import cohen_kappa_score
     except ImportError:
         return pd.DataFrame({"오류": ["scikit-learn이 설치되지 않았습니다."]})
 
+    pairs = [
+        ("Reviewer A", "Reviewer B", "A-B"),
+        ("Reviewer A", "Reviewer C", "A-C"),
+        ("Reviewer B", "Reviewer C", "B-C"),
+    ]
     results = []
     for eng, _ in DISEASE_COLS:
         sub = compare[compare["disease"] == eng].copy()
         row = {"질환": eng}
         for tp in ("T0", "T1", "Tall"):
             s = sub[sub["timepoint"] == tp].copy()
-            s = s[(s["Reviewer A"].isin(("Yes", "No"))) &
-                  (s["Reviewer B"].isin(("Yes", "No")))]
-            if len(s) < 2:
-                row[f"{tp} kappa"] = None
-            else:
-                try:
-                    k = cohen_kappa_score(s["Reviewer A"], s["Reviewer B"])
-                    row[f"{tp} kappa"] = round(k, 3)
-                except Exception:
-                    row[f"{tp} kappa"] = None
+            for r1, r2, label in pairs:
+                if r1 not in s.columns or r2 not in s.columns:
+                    row[f"{tp} ({label})"] = None
+                    continue
+                s2 = s[(s[r1].isin(("Yes", "No"))) & (s[r2].isin(("Yes", "No")))]
+                if len(s2) < 2:
+                    row[f"{tp} ({label})"] = None
+                else:
+                    try:
+                        k = cohen_kappa_score(s2[r1], s2[r2])
+                        row[f"{tp} ({label})"] = round(k, 3)
+                    except Exception:
+                        row[f"{tp} ({label})"] = None
         results.append(row)
     return pd.DataFrame(results)
 
@@ -162,19 +171,20 @@ def render_admin_page() -> None:
         st.stop()
 
     st.markdown("## 🔐 관리자 페이지")
-    st.caption("Reviewer A/B 응답 현황 및 일치도 분석")
+    st.caption("Reviewer A/B/C 응답 현황 및 일치도 분석")
 
     with st.spinner("Google Sheets에서 데이터 불러오는 중..."):
-        ann_a, ann_b = _load_both()
+        ann_a, ann_b, ann_c = _load_all()
 
-    compare = _build_compare_df(ann_a, ann_b)
+    compare = _build_compare_df(ann_a, ann_b, ann_c)
 
     # ── 섹션 1: 전체 진행 현황 ────────────────────────────────────────────────
     st.markdown("### 1. 전체 진행 현황")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     for col, reviewer, ann in [
         (col1, REVIEWERS[0], ann_a),
         (col2, REVIEWERS[1], ann_b),
+        (col3, REVIEWERS[2], ann_c),
     ]:
         stats = _completion_stats(ann)
         with col:
@@ -191,19 +201,18 @@ def render_admin_page() -> None:
     st.markdown("<br>", unsafe_allow_html=True)
 
     if compare.empty:
-        st.info("아직 두 reviewer 데이터가 모두 없습니다.")
+        st.info("아직 reviewer 데이터가 없습니다.")
         return
 
-    # ── 섹션 2: 케이스별 A/B 비교 테이블 ─────────────────────────────────────
-    st.markdown("### 2. 케이스별 A/B 비교")
+    # ── 섹션 2: 케이스별 A/B/C 비교 테이블 ───────────────────────────────────
+    st.markdown("### 2. 케이스별 A/B/C 비교")
 
-    # 불일치 행만 빨간 배경
     def _row_style(row):
         if row["일치"] == "❌":
             return ["background-color: #fdecea"] * len(row)
         return [""] * len(row)
 
-    display_cols = ["case_index", "timepoint", "disease", "Reviewer A", "Reviewer B", "일치"]
+    display_cols = ["case_index", "timepoint", "disease", "Reviewer A", "Reviewer B", "Reviewer C", "일치"]
     st.dataframe(
         compare[display_cols].style.apply(_row_style, axis=1),
         use_container_width=True,
@@ -212,22 +221,21 @@ def render_admin_page() -> None:
     )
 
     # ── 섹션 3: Cohen's Kappa ─────────────────────────────────────────────────
-    st.markdown("### 3. Cohen's Kappa (질환 × 시점)")
+    st.markdown("### 3. Cohen's Kappa (질환 × 시점 × 쌍)")
     st.caption("≥ 0.80 높음 (초록) / 0.60–0.79 보통 (노랑) / < 0.60 낮음 (빨강)")
 
     kappa_df = _kappa_table(compare)
     if "오류" in kappa_df.columns:
         st.warning(kappa_df["오류"].iloc[0])
     else:
-        styled = kappa_df.style.applymap(
-            _kappa_color, subset=["T0 kappa", "T1 kappa", "Tall kappa"]
-        )
+        kappa_cols = [c for c in kappa_df.columns if c != "질환"]
+        styled = kappa_df.style.applymap(_kappa_color, subset=kappa_cols)
         st.dataframe(styled, use_container_width=True, hide_index=True)
 
     # ── 섹션 4: 불일치 케이스 목록 ───────────────────────────────────────────
     st.markdown("### 4. 불일치 케이스 목록")
     discord = compare[compare["일치"] == "❌"][
-        ["case_index", "timepoint", "disease", "Reviewer A", "Reviewer B"]
+        ["case_index", "timepoint", "disease", "Reviewer A", "Reviewer B", "Reviewer C"]
     ].reset_index(drop=True)
 
     if discord.empty:
@@ -247,7 +255,7 @@ def _export_discordant(discord: pd.DataFrame) -> None:
         except Exception:
             ws = ss.add_worksheet(title="Discordant", rows=1000, cols=20)
 
-        header = ["case_index", "timepoint", "disease", "Reviewer A", "Reviewer B"]
+        header = ["case_index", "timepoint", "disease", "Reviewer A", "Reviewer B", "Reviewer C"]
         data = [header] + discord.values.tolist()
         ws.clear()
         ws.update("A1", data)

@@ -50,6 +50,7 @@ DISEASE_COL_MAP = {
 SHEET_TAB_MAP = {
     "김민하 교수님": "Reviewer A (김민하)",
     "맹승진 교수님": "Reviewer B (맹승진)",
+    "장한솔 교수님": "Reviewer C (장한솔)",
 }
 
 
