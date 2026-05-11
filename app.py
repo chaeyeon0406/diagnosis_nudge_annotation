@@ -24,6 +24,7 @@ st.session_state.setdefault("reviewer", "김민하 교수님")
 st.session_state.setdefault("case_idx", 0)
 st.session_state.setdefault("is_admin", False)
 st.session_state.setdefault("cached_ann", None)   # Sheets 1회 로드 캐시
+st.session_state.setdefault("tab_radio", "T0  (Triage)")
 
 # ── 데이터 로드 (캐시됨, 빠름) ────────────────────────────────────────────────
 t0, t1, tall = load_data()

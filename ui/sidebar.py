@@ -21,10 +21,12 @@ def render_sidebar(reviewer: str, done_cases: set, total: int) -> None:
         with col_prev:
             if st.button("← 이전", disabled=(cur_idx == 0), use_container_width=True):
                 st.session_state.case_idx -= 1
+                st.session_state["tab_radio"] = "T0  (Triage)"
                 st.rerun()
         with col_next:
             if st.button("다음 →", disabled=(cur_idx >= total - 1), use_container_width=True):
                 st.session_state.case_idx += 1
+                st.session_state["tab_radio"] = "T0  (Triage)"
                 st.rerun()
 
         st.divider()
@@ -41,6 +43,7 @@ def render_sidebar(reviewer: str, done_cases: set, total: int) -> None:
         )
         if st.button("이동", use_container_width=True):
             st.session_state.case_idx = int(jump_val) - 1
+            st.session_state["tab_radio"] = "T0  (Triage)"
             st.rerun()
 
         st.divider()

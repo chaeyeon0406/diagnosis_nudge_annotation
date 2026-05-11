@@ -392,6 +392,9 @@ def _t0_summary_expander(row_t0: pd.Series) -> None:
             st.markdown(f"**Medications:** {meds}")
 
 
+TAB_OPTIONS = ["T0  (Triage)", "T1  (1시간)", "Tall  (전체)"]
+
+
 # ── Public ────────────────────────────────────────────────────────────────────
 
 def render_tabs(row_t0: pd.Series, row_t1: pd.Series, row_tall: pd.Series,
@@ -402,10 +405,16 @@ def render_tabs(row_t0: pd.Series, row_t1: pd.Series, row_tall: pd.Series,
     transport  = str(row_t0.get("arrival_transport", "—"))
     acuity_val = str(row_t0.get("acuity", "—"))
 
-    tab_t0, tab_t1, tab_tall = st.tabs(["T0  (Triage)", "T1  (1시간)", "Tall  (전체)"])
+    # st.radio로 탭 구현 → session_state로 탭 전환 제어 가능
+    selected = st.radio(
+        "", TAB_OPTIONS, horizontal=True,
+        label_visibility="collapsed", key="tab_radio",
+    )
+
+    st.divider()
 
     # ── T0 ──────────────────────────────────────
-    with tab_t0:
+    if selected == TAB_OPTIONS[0]:
         col_data, col_ann = st.columns([3, 1])
         with col_data:
             _card_open("기본 정보")
@@ -444,7 +453,7 @@ def render_tabs(row_t0: pd.Series, row_t1: pd.Series, row_tall: pd.Series,
             render_annotation_panel(reviewer, idx, stay_id, total, "T0", existing_ann)
 
     # ── T1 ──────────────────────────────────────
-    with tab_t1:
+    elif selected == TAB_OPTIONS[1]:
         col_data, col_ann = st.columns([3, 1])
         with col_data:
             _t0_summary_expander(row_t0)
@@ -464,7 +473,7 @@ def render_tabs(row_t0: pd.Series, row_t1: pd.Series, row_tall: pd.Series,
             render_annotation_panel(reviewer, idx, stay_id, total, "T1", existing_ann)
 
     # ── Tall ─────────────────────────────────────
-    with tab_tall:
+    else:
         col_data, col_ann = st.columns([3, 1])
         with col_data:
             _t0_summary_expander(row_t0)
