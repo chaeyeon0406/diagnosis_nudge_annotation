@@ -405,6 +405,11 @@ def render_tabs(row_t0: pd.Series, row_t1: pd.Series, row_tall: pd.Series,
     transport  = str(row_t0.get("arrival_transport", "—"))
     acuity_val = str(row_t0.get("acuity", "—"))
 
+    # annotation_panel이 radio 렌더 이후에 탭 전환을 요청하면
+    # _pending_tab에 저장해두고, 다음 렌더 시작 시 여기서 적용
+    if "_pending_tab" in st.session_state:
+        st.session_state["tab_radio"] = st.session_state.pop("_pending_tab")
+
     # st.radio로 탭 구현 → session_state로 탭 전환 제어 가능
     selected = st.radio(
         "", TAB_OPTIONS, horizontal=True,

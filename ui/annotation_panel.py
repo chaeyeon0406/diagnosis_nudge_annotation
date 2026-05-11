@@ -151,7 +151,7 @@ def render_annotation_panel(reviewer: str, idx: int, stay_id, total: int,
             use_container_width=True, key=f"save_T0_{idx}",
         ):
             _save_and_refresh_cache("T0")
-            st.session_state["tab_radio"] = TAB_OPTIONS[1]  # → T1 탭
+            st.session_state["_pending_tab"] = TAB_OPTIONS[1]  # → T1 탭
             st.rerun()
 
     elif timepoint == "T1":
@@ -162,7 +162,7 @@ def render_annotation_panel(reviewer: str, idx: int, stay_id, total: int,
                 use_container_width=True, key=f"prev_T1_{idx}",
             ):
                 st.session_state.case_idx = max(0, idx - 1)
-                st.session_state["tab_radio"] = TAB_OPTIONS[0]  # → T0 탭
+                st.session_state["_pending_tab"] = TAB_OPTIONS[0]  # → T0 탭
                 st.rerun()
         with c_save:
             if st.button(
@@ -172,7 +172,7 @@ def render_annotation_panel(reviewer: str, idx: int, stay_id, total: int,
                 help=None if t0_saved else "T0 먼저 저장하세요",
             ):
                 _save_and_refresh_cache("T1")
-                st.session_state["tab_radio"] = TAB_OPTIONS[2]  # → Tall 탭
+                st.session_state["_pending_tab"] = TAB_OPTIONS[2]  # → Tall 탭
                 st.rerun()
 
     else:  # Tall
@@ -184,7 +184,7 @@ def render_annotation_panel(reviewer: str, idx: int, stay_id, total: int,
                 use_container_width=True, key=f"prev_Tall_{idx}",
             ):
                 st.session_state.case_idx = max(0, idx - 1)
-                st.session_state["tab_radio"] = TAB_OPTIONS[0]  # → T0 탭
+                st.session_state["_pending_tab"] = TAB_OPTIONS[0]  # → T0 탭
                 st.rerun()
         with c_save:
             help_msg = (
@@ -200,5 +200,5 @@ def render_annotation_panel(reviewer: str, idx: int, stay_id, total: int,
                 ok = _save_and_refresh_cache("Tall")
                 if ok and idx < total - 1:
                     st.session_state.case_idx = idx + 1
-                st.session_state["tab_radio"] = TAB_OPTIONS[0]  # → T0 탭
+                st.session_state["_pending_tab"] = TAB_OPTIONS[0]  # → T0 탭
                 st.rerun()
