@@ -5,7 +5,7 @@ from utils.storage import save_annotation, load_annotations
 DISEASES = [
     ("Aortic Dissection",     "aortic_dissection",     "대동맥 박리"),
     ("Myocardial Infarction", "myocardial_infarction",  "심근경색"),
-    ("Stroke",                "stroke",                 "뇌졸중"),
+    ("Stroke Syndrome",       "stroke",                 "뇌졸중"),
     ("Meningitis",            "meningitis",              "뇌수막염"),
     ("Sepsis",                "sepsis",                  "패혈증"),
 ]

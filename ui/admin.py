@@ -7,7 +7,7 @@ _ADMIN_PW = "admin1234"
 DISEASE_COLS = [
     ("Aortic Dissection",     "aortic_dissection"),
     ("Myocardial Infarction", "myocardial_infarction"),
-    ("Stroke",                "stroke"),
+    ("Stroke Syndrome",       "stroke"),
     ("Meningitis",            "meningitis"),
     ("Sepsis",                "sepsis"),
 ]

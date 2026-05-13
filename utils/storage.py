@@ -41,7 +41,7 @@ ANNOTATION_COLS = [
 DISEASE_COL_MAP = {
     "Aortic Dissection":     "aortic_dissection",
     "Myocardial Infarction": "myocardial_infarction",
-    "Stroke":                "stroke",
+    "Stroke Syndrome":       "stroke",
     "Meningitis":            "meningitis",
     "Sepsis":                "sepsis",
 }
